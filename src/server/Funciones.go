@@ -4,63 +4,63 @@ Paquete personalizado para generacion de endpoints y calculos
 package server
 
 //Dependencias, librerias necesarias para la configuración
-import (
-	"math"
-)
 
 //Definicion de estrucuturas
 type data struct {
-	Satellites []satelite `json:"satellites"`
+	Persons []person `json:"Persons"`
 }
 
-type satelite struct {
-	Name     string   `json:"Name"`
-	Distance float32  `json:"Distance"`
-	Message  []string `json:"Message"`
-	CoorX    float32  `json:"CoorX"`
-	Coory    float32  `json:"Coory"`
+type person struct {
+	Name     string `json:"Name"`
+	LastName string `json:"LastName"`
+	DNI      string `json:"DNI"`
+	Empleado bool   `json:"Empleado"`
 }
 
-type allsatelite []satelite
+type allsPerson []person
 
-var satelites = allsatelite{}
+var persons = allsPerson{}
 
-// input: distancia al emisor tal cual se recibe en cada satélite
-// output: las coordenadas ‘x’ e ‘y’ del emisor del mensaje
-func GetLocation(distances ...float32) (x, y float32) {
+// input:El codido identificativo de la persona (DNI)
+// output: Datos de la persona
+func getPerson(person_id string) (name, lasName, DNI string, empleado bool) {
 
-	var R1 = distances[1]
-	var R2 = distances[2]
-	var d = float32(100)
-	var i = float32(500)
-	var j = float32(100)
-
-	x = (float32(math.Pow(float64(R1), 2)) - float32(math.Pow(float64(R2), 2)) + float32(math.Pow(float64(d), 2))) / (2 * d)
-
-	y = ((float32(math.Pow(float64(R1), 2))-float32(math.Pow(float64(R2), 2))+float32(math.Pow(float64(i), 2))+float32(math.Pow(float64(j), 2)))/(2*j) - (i/j)*x)
-
-	return x, y
+	for _, person := range persons {
+		if person.DNI == person_id {
+			return person.Name, person.LastName, person.DNI, person.Empleado
+		}
+	}
+	return "Null", "Null", "Null", false
 }
 
-// input: el mensaje tal cual es recibido en cada satélite
-// output: el mensaje tal cual lo genera el emisor del mensaje
-func GetMessage(messages ...[]string) (msg string) {
-	var mensajeFinal [225]string
+// input:El codido identificativo de la persona (DNI) y la informacion de la persona
+// output: Respuesta true o false que indica si se ejecuto correctamente el proceso
+func updatePerson(person_id string, person person) (res bool) {
 
-	for i := 0; i < len(messages); i++ {
-		for j := 0; j < len(messages[i]); j++ {
-			var dato = messages[i][j]
-			if dato != "" {
-				mensajeFinal[j] = dato
-			}
+	for i, t := range persons {
+		if t.DNI == person_id {
+			persons = append(persons[:i], persons[i+1:]...)
+
+			person.DNI = t.DNI
+			persons = append(persons, person)
+			return true
+
 		}
 	}
 
-	for t := 0; t < len(mensajeFinal); t++ {
-		if mensajeFinal[t] != "" {
-			msg = msg + " " + mensajeFinal[t]
-		}
+	return false
+}
 
+// input:El codido identificativo de la persona (DNI)
+// output: Respuesta true o false que indica si se ejecuto correctamente el proceso
+func deletePerson(person_id string) (res bool) {
+
+	for i, t := range persons {
+		if t.DNI == person_id {
+			persons = append(persons[:i], persons[i+1:]...)
+			return true
+		}
 	}
-	return msg
+
+	return false
 }

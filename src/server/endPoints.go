@@ -6,7 +6,6 @@ package server
 //Dependencias, librerias necesarias para la configuración
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -23,13 +22,10 @@ type Server interface {
 }
 
 type response struct {
-	Position posicion `json:"Position"`
-	Message  string   `json:"Message"`
-}
-
-type posicion struct {
-	Coorx float32 `json:"x"`
-	Coory float32 `json:"y"`
+	Name     string `json:"Name"`
+	LastName string `json:"LastName"`
+	DNI      string `json:"DNI"`
+	Empleado bool   `json:"Empleado"`
 }
 
 //Declaracion de los endpoints y funciones
@@ -38,10 +34,11 @@ func New() Server {
 
 	r := mux.NewRouter()
 
-	r.HandleFunc("/topsecret", a.topsecret).Methods(http.MethodPost)
-	r.HandleFunc("/topsecret_split/{satellite_name}", a.topsecret_split).Methods(http.MethodPost)
-	r.HandleFunc("/topsecret_split", a.topsecret_split_Get).Methods(http.MethodGet)
-	r.HandleFunc("/topsecret_split", a.topsecret_split_Post).Methods(http.MethodPost)
+	r.HandleFunc("/createPerson", a.createPerson).Methods(http.MethodPost)
+	r.HandleFunc("/selectPerson/{Person_id}", a.selectPerson).Methods(http.MethodGet)
+	r.HandleFunc("/getPersons", a.getPersons).Methods(http.MethodGet)
+	r.HandleFunc("/deletePerson/{Person_id}", a.deletePerson).Methods(http.MethodDelete)
+	r.HandleFunc("/updatePerson/{Person_id}", a.updatePerson).Methods(http.MethodPut)
 
 	a.router = r
 	return a
@@ -51,16 +48,14 @@ func (a *api) Router() http.Handler {
 	return a.router
 }
 
-//endpoint: http://server_ip/topsecret
+//endpoint: http://server_ip/createPerson
 //metodo: Post
-//Descripcion: funcion para leer json con los datos enviados por los tres satelites
+//Descripcion: funcion para leer json con los datos enviados para crear una persona
 //Input: json
-//Output: json
-func (a *api) topsecret(w http.ResponseWriter, r *http.Request) {
+//Output: Code HTTP
+func (a *api) createPerson(w http.ResponseWriter, r *http.Request) {
 
 	var newData data
-	var distances []float32
-	var message [][]string
 
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -69,62 +64,93 @@ func (a *api) topsecret(w http.ResponseWriter, r *http.Request) {
 
 	json.Unmarshal(reqBody, &newData)
 
-	for i := 0; i < len(newData.Satellites); i++ {
+	for i := 0; i < len(newData.Persons); i++ {
 
-		if newData.Satellites[i].Name == "kenobi" {
-
-			newData.Satellites[i].CoorX = -500
-			newData.Satellites[i].Coory = -200
-			satelites = append(satelites, newData.Satellites[i])
-
-			distances = append(distances, newData.Satellites[i].Distance)
-			message = append(message, newData.Satellites[i].Message)
-
-		} else if newData.Satellites[i].Name == "skywalker" {
-
-			newData.Satellites[i].CoorX = 100
-			newData.Satellites[i].Coory = -100
-			satelites = append(satelites, newData.Satellites[i])
-
-			distances = append(distances, newData.Satellites[i].Distance)
-			message = append(message, newData.Satellites[i].Message)
-
-		} else if newData.Satellites[i].Name == "sato" {
-
-			newData.Satellites[i].CoorX = 500
-			newData.Satellites[i].Coory = 100
-			satelites = append(satelites, newData.Satellites[i])
-
-			distances = append(distances, newData.Satellites[i].Distance)
-			message = append(message, newData.Satellites[i].Message)
-
-		}
+		persons = append(persons, newData.Persons[i])
 
 	}
 
-	msg := GetMessage(message...)
-	x, y := GetLocation(distances...)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+}
+
+//endpoint: http://server_ip/selectPerson/person_id
+//metodo: Get
+//Descripcion: Funcion que retorna un json con la informacion de una persona
+//input: Parametro "person_id"
+//output: Json
+func (a *api) selectPerson(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	person_id := vars["Person_id"]
+
+	if person_id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	name, lasName, DNI, empleado := getPerson(person_id)
 
 	var res response
-	res.Position.Coorx = x
-	res.Position.Coory = y
-	res.Message = msg
+	res.Name = name
+	res.LastName = lasName
+	res.DNI = DNI
+	res.Empleado = empleado
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(res)
+
 }
 
-//endpoint: http://server_ip/topsecret_split/satellite_name
-//metodo: Post
-//Descripcion: funcion para leer los datos enviados de un satelite
-//input: Parametro "satellite_name" y json
-func (a *api) topsecret_split(w http.ResponseWriter, r *http.Request) {
+//endpoint: http://server_ip/getPersons
+//metodo: Get
+//Descripcion: Funcion que retorna todos las personas creadas
+//Output: json
+func (a *api) getPersons(w http.ResponseWriter, r *http.Request) {
 
-	var data satelite
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(persons)
+}
+
+//endpoint: http://server_ip/deletePerson/person_id
+//metodo: Delete
+//Descripcion: Funcion que da de baja a una persona en el sistema
+//Input: parametro person_id
+//Output: code HTTP
+func (a *api) deletePerson(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	person_id := vars["Person_id"]
+
+	if person_id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	res := deletePerson(person_id)
+
+	if res {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+}
+
+//endpoint: http://server_ip/updatePerson/person_id
+//metodo: PUT
+//Descripcion: Funcion que actualiza una persona en el sistema
+//Input: person_id, json
+//Output: json
+func (a *api) updatePerson(w http.ResponseWriter, r *http.Request) {
+
+	var data person
 	vars := mux.Vars(r)
 
-	sateliteName := vars["satellite_name"]
+	person_id := vars["Person_id"]
+
+	if person_id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
 
 	reqBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -133,51 +159,16 @@ func (a *api) topsecret_split(w http.ResponseWriter, r *http.Request) {
 
 	json.Unmarshal(reqBody, &data)
 
-	data.Name = sateliteName
+	res := updatePerson(person_id, data)
 
-	if sateliteName == "kenobi" {
-		data.CoorX = -500
-		data.Coory = -200
-		satelites = append(satelites, data)
-	} else if sateliteName == "skywalker" {
-		data.CoorX = 100
-		data.Coory = -100
-		satelites = append(satelites, data)
-	} else if sateliteName == "sato" {
-		data.CoorX = 500
-		data.Coory = 100
-		satelites = append(satelites, data)
-	}
-
-	w.WriteHeader(http.StatusAccepted)
-}
-
-//endpoint: http://server_ip/topsecret_split
-//metodo: Get
-//Descripcion: funcion para retornar calculo de posicion y mensaje oculto
-//Output: json
-func (a *api) topsecret_split_Get(w http.ResponseWriter, r *http.Request) {
-
-	var distances []float32
-	var message [][]string
-
-	for i, t := range satelites {
-		if t.Distance >= 0 {
-			fmt.Print(i)
-			distances = append(distances, t.Distance)
-			message = append(message, t.Message)
-		}
-
-	}
-
-	if len(distances) >= 2 {
-		msg := GetMessage(message...)
-		x, y := GetLocation(distances...)
+	if res {
+		name, lasName, DNI, empleado := getPerson(person_id)
 
 		var res response
-		res.Position.Coorx = x
-		res.Position.Coory = y
-		res.Message = msg
+		res.Name = name
+		res.LastName = lasName
+		res.DNI = DNI
+		res.Empleado = empleado
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -185,34 +176,4 @@ func (a *api) topsecret_split_Get(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 	}
-}
-
-//endpoint: http://server_ip/topsecret_split
-//metodo: Post
-//Descripcion: funcion que recibe los datos de una nave
-//Input: json
-//Output: json
-func (a *api) topsecret_split_Post(w http.ResponseWriter, r *http.Request) {
-	var data satelite
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-	}
-
-	json.Unmarshal(reqBody, &data)
-	if data.Name == "kenobi" {
-		data.CoorX = -500
-		data.Coory = -200
-		satelites = append(satelites, data)
-	} else if data.Name == "skywalker" {
-		data.CoorX = 100
-		data.Coory = -100
-		satelites = append(satelites, data)
-	} else if data.Name == "sato" {
-		data.CoorX = 500
-		data.Coory = 100
-		satelites = append(satelites, data)
-	}
-
-	w.WriteHeader(http.StatusAccepted)
 }
